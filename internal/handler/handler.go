@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/gin-gonic/gin"
+
 	"github.com/Kr1t1ka/shortUrl/internal/service"
 )
 
@@ -16,53 +18,44 @@ func NewHandler(shortener *service.Shortener) *Handler {
 	return &Handler{shortener: shortener}
 }
 
-func (h *Handler) Route(w http.ResponseWriter, r *http.Request) {
-	switch {
-	case r.Method == http.MethodPost && r.URL.Path == "/":
-		h.shortenHandler(w, r)
-	case r.Method == http.MethodGet && r.URL.Path != "/":
-		h.redirectHandler(w, r)
-	default:
-		http.Error(w, "bad request", http.StatusBadRequest)
-	}
+func (h *Handler) Register(r *gin.Engine) {
+	r.POST("/", h.shortenHandler)
+	r.GET("/:id", h.redirectHandler)
+	r.NoRoute(func(c *gin.Context) {
+		c.String(http.StatusBadRequest, "bad request")
+	})
 }
 
-func (h *Handler) shortenHandler(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
+func (h *Handler) shortenHandler(c *gin.Context) {
+	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		c.String(http.StatusBadRequest, "bad request")
 		return
 	}
 
 	originalURL := strings.TrimSpace(string(body))
 	if len(originalURL) == 0 {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		c.String(http.StatusBadRequest, "bad request")
 		return
 	}
 
 	id, err := h.shortener.Shorten(originalURL)
 	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		c.String(http.StatusInternalServerError, "internal error")
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/plain")
-	w.WriteHeader(http.StatusCreated)
-	_, _ = w.Write([]byte("http://localhost:8080/" + id))
+	c.String(http.StatusCreated, "http://localhost:8080/"+id)
 }
 
-func (h *Handler) redirectHandler(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(r.URL.Path, "/")
-	if id == "" {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
+func (h *Handler) redirectHandler(c *gin.Context) {
+	id := c.Param("id")
 
 	original, ok := h.shortener.Resolve(id)
 	if !ok {
-		http.Error(w, "not found", http.StatusBadRequest)
+		c.String(http.StatusBadRequest, "not found")
 		return
 	}
 
-	http.Redirect(w, r, original, http.StatusTemporaryRedirect)
+	c.Redirect(http.StatusTemporaryRedirect, original)
 }

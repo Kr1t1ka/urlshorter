@@ -2,7 +2,8 @@ package main
 
 import (
 	"log"
-	"net/http"
+
+	"github.com/gin-gonic/gin"
 
 	"github.com/Kr1t1ka/shortUrl/internal/handler"
 	"github.com/Kr1t1ka/shortUrl/internal/repository"
@@ -14,8 +15,8 @@ func main() {
 	shortener := service.NewShortener(store)
 	h := handler.NewHandler(shortener)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", h.Route)
+	r := gin.Default()
+	h.Register(r)
 
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	log.Fatal(r.Run(":8080"))
 }

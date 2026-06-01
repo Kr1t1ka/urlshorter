@@ -6,8 +6,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
+
 	"github.com/Kr1t1ka/shortUrl/internal/service"
 )
+
+func init() {
+	gin.SetMode(gin.TestMode)
+}
 
 type mockStorage struct {
 	data map[string]string
@@ -26,8 +32,18 @@ func (m *mockStorage) Get(id string) (string, bool) {
 	return url, ok
 }
 
-func newTestHandler() *Handler {
-	return NewHandler(service.NewShortener(newMockStorage()))
+func newTestEngine() *gin.Engine {
+	r := gin.New()
+	h := NewHandler(service.NewShortener(newMockStorage()))
+	h.Register(r)
+	return r
+}
+
+func newTestEngineWithStore(store *mockStorage) *gin.Engine {
+	r := gin.New()
+	h := NewHandler(service.NewShortener(store))
+	h.Register(r)
+	return r
 }
 
 func TestShortenHandler(t *testing.T) {
@@ -46,7 +62,7 @@ func TestShortenHandler(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tt.body))
 			rr := httptest.NewRecorder()
 
-			newTestHandler().Route(rr, req)
+			newTestEngine().ServeHTTP(rr, req)
 
 			if rr.Code != tt.wantStatus {
 				t.Errorf("got status %d, want %d", rr.Code, tt.wantStatus)
@@ -59,7 +75,7 @@ func TestShortenHandlerResponseBody(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("https://example.com"))
 	rr := httptest.NewRecorder()
 
-	newTestHandler().Route(rr, req)
+	newTestEngine().ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("got status %d, want %d", rr.Code, http.StatusCreated)
@@ -72,7 +88,6 @@ func TestShortenHandlerResponseBody(t *testing.T) {
 func TestRedirectHandler(t *testing.T) {
 	store := newMockStorage()
 	store.Set("abc123", "https://example.com")
-	h := NewHandler(service.NewShortener(store))
 
 	tests := []struct {
 		name         string
@@ -89,7 +104,7 @@ func TestRedirectHandler(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/"+tt.id, nil)
 			rr := httptest.NewRecorder()
 
-			h.Route(rr, req)
+			newTestEngineWithStore(store).ServeHTTP(rr, req)
 
 			if rr.Code != tt.wantStatus {
 				t.Errorf("got status %d, want %d", rr.Code, tt.wantStatus)
@@ -119,7 +134,7 @@ func TestRouteInvalidRequests(t *testing.T) {
 			req := httptest.NewRequest(tt.method, tt.path, nil)
 			rr := httptest.NewRecorder()
 
-			newTestHandler().Route(rr, req)
+			newTestEngine().ServeHTTP(rr, req)
 
 			if rr.Code != http.StatusBadRequest {
 				t.Errorf("got status %d, want %d", rr.Code, http.StatusBadRequest)
