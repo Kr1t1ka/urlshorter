@@ -12,10 +12,11 @@ import (
 
 type Handler struct {
 	shortener *service.Shortener
+	baseURL   string
 }
 
-func NewHandler(shortener *service.Shortener) *Handler {
-	return &Handler{shortener: shortener}
+func NewHandler(shortener *service.Shortener, baseURL string) *Handler {
+	return &Handler{shortener: shortener, baseURL: baseURL}
 }
 
 func (h *Handler) Register(r *gin.Engine) {
@@ -45,7 +46,7 @@ func (h *Handler) shortenHandler(c *gin.Context) {
 		return
 	}
 
-	c.String(http.StatusCreated, "http://localhost:8080/"+id)
+	c.String(http.StatusCreated, h.baseURL+"/"+id)
 }
 
 func (h *Handler) redirectHandler(c *gin.Context) {

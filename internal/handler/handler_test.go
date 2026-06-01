@@ -34,14 +34,14 @@ func (m *mockStorage) Get(id string) (string, bool) {
 
 func newTestEngine() *gin.Engine {
 	r := gin.New()
-	h := NewHandler(service.NewShortener(newMockStorage()))
+	h := NewHandler(service.NewShortener(newMockStorage()), "http://localhost:8080")
 	h.Register(r)
 	return r
 }
 
 func newTestEngineWithStore(store *mockStorage) *gin.Engine {
 	r := gin.New()
-	h := NewHandler(service.NewShortener(store))
+	h := NewHandler(service.NewShortener(store), "http://localhost:8080")
 	h.Register(r)
 	return r
 }
