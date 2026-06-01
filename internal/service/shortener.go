@@ -3,15 +3,18 @@ package service
 import (
 	"crypto/rand"
 	"encoding/base64"
-
-	"github.com/Kr1t1ka/shortUrl/internal/repository"
 )
 
-type Shortener struct {
-	store *repository.Store
+type Storage interface {
+	Set(id, url string)
+	Get(id string) (string, bool)
 }
 
-func NewShortener(store *repository.Store) *Shortener {
+type Shortener struct {
+	store Storage
+}
+
+func NewShortener(store Storage) *Shortener {
 	return &Shortener{store: store}
 }
 
