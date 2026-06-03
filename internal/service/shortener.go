@@ -3,8 +3,10 @@ package service
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 )
 
+//go:generate mockgen -source=shortener.go -destination=mocks/mock_storage.go -package=mocks
 type Storage interface {
 	Set(id, url string)
 	Get(id string) (string, bool)
@@ -18,13 +20,20 @@ func NewShortener(store Storage) *Shortener {
 	return &Shortener{store: store}
 }
 
+const maxAttempts = 5
+
 func (s *Shortener) Shorten(originalURL string) (string, error) {
-	id, err := generateID()
-	if err != nil {
-		return "", err
+	for range maxAttempts {
+		id, err := generateID()
+		if err != nil {
+			return "", err
+		}
+		if _, exists := s.store.Get(id); !exists {
+			s.store.Set(id, originalURL)
+			return id, nil
+		}
 	}
-	s.store.Set(id, originalURL)
-	return id, nil
+	return "", errors.New("failed to generate unique id")
 }
 
 func (s *Shortener) Resolve(id string) (string, bool) {

@@ -2,20 +2,26 @@ package handler
 
 import (
 	"io"
+	"log"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-
-	"github.com/Kr1t1ka/shortUrl/internal/service"
 )
 
+//go:generate mockgen -source=handler.go -destination=mocks/mock_shortener_service.go -package=mocks
+type shortenerService interface {
+	Shorten(url string) (string, error)
+	Resolve(id string) (string, bool)
+}
+
 type Handler struct {
-	shortener *service.Shortener
+	shortener shortenerService
 	baseURL   string
 }
 
-func NewHandler(shortener *service.Shortener, baseURL string) *Handler {
+func NewHandler(shortener shortenerService, baseURL string) *Handler {
 	return &Handler{shortener: shortener, baseURL: baseURL}
 }
 
@@ -42,11 +48,19 @@ func (h *Handler) shortenHandler(c *gin.Context) {
 
 	id, err := h.shortener.Shorten(originalURL)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "internal error")
+		log.Printf("shorten error: %v", err)
+		c.String(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 		return
 	}
 
-	c.String(http.StatusCreated, h.baseURL+"/"+id)
+	shortURL, err := url.JoinPath(h.baseURL, id)
+	if err != nil {
+		log.Printf("url join error: %v", err)
+		c.String(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		return
+	}
+
+	c.String(http.StatusCreated, shortURL)
 }
 
 func (h *Handler) redirectHandler(c *gin.Context) {

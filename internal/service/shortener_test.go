@@ -1,26 +1,20 @@
 package service
 
-import "testing"
+import (
+	"testing"
 
-type mockStorage struct {
-	data map[string]string
-}
+	"go.uber.org/mock/gomock"
 
-func newMockStorage() *mockStorage {
-	return &mockStorage{data: map[string]string{}}
-}
-
-func (m *mockStorage) Set(id, url string) {
-	m.data[id] = url
-}
-
-func (m *mockStorage) Get(id string) (string, bool) {
-	url, ok := m.data[id]
-	return url, ok
-}
+	"github.com/Kr1t1ka/shortUrl/internal/service/mocks"
+)
 
 func TestShorten(t *testing.T) {
-	store := newMockStorage()
+	ctrl := gomock.NewController(t)
+	store := mocks.NewMockStorage(ctrl)
+
+	store.EXPECT().Get(gomock.Any()).Return("", false)
+	store.EXPECT().Set(gomock.Any(), "https://example.com")
+
 	svc := NewShortener(store)
 
 	id, err := svc.Shorten("https://example.com")
@@ -30,19 +24,13 @@ func TestShorten(t *testing.T) {
 	if id == "" {
 		t.Fatal("expected non-empty id")
 	}
-
-	stored, ok := store.Get(id)
-	if !ok {
-		t.Fatal("url not found in storage after Shorten")
-	}
-	if stored != "https://example.com" {
-		t.Errorf("got %q, want %q", stored, "https://example.com")
-	}
 }
 
 func TestResolve(t *testing.T) {
-	store := newMockStorage()
-	store.Set("abc123", "https://example.com")
+	ctrl := gomock.NewController(t)
+	store := mocks.NewMockStorage(ctrl)
+	store.EXPECT().Get("abc123").Return("https://example.com", true)
+
 	svc := NewShortener(store)
 
 	got, ok := svc.Resolve("abc123")
@@ -55,7 +43,11 @@ func TestResolve(t *testing.T) {
 }
 
 func TestResolveNotFound(t *testing.T) {
-	svc := NewShortener(newMockStorage())
+	ctrl := gomock.NewController(t)
+	store := mocks.NewMockStorage(ctrl)
+	store.EXPECT().Get("nonexistent").Return("", false)
+
+	svc := NewShortener(store)
 
 	_, ok := svc.Resolve("nonexistent")
 	if ok {

@@ -3,45 +3,24 @@ package handler
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/mock/gomock"
 
-	"github.com/Kr1t1ka/shortUrl/internal/service"
+	"github.com/Kr1t1ka/shortUrl/internal/handler/mocks"
 )
 
-func init() {
+func TestMain(m *testing.M) {
 	gin.SetMode(gin.TestMode)
+	os.Exit(m.Run())
 }
 
-type mockStorage struct {
-	data map[string]string
-}
-
-func newMockStorage() *mockStorage {
-	return &mockStorage{data: map[string]string{}}
-}
-
-func (m *mockStorage) Set(id, url string) {
-	m.data[id] = url
-}
-
-func (m *mockStorage) Get(id string) (string, bool) {
-	url, ok := m.data[id]
-	return url, ok
-}
-
-func newTestEngine() *gin.Engine {
+func newEngine(svc shortenerService) *gin.Engine {
 	r := gin.New()
-	h := NewHandler(service.NewShortener(newMockStorage()), "http://localhost:8080")
-	h.Register(r)
-	return r
-}
-
-func newTestEngineWithStore(store *mockStorage) *gin.Engine {
-	r := gin.New()
-	h := NewHandler(service.NewShortener(store), "http://localhost:8080")
+	h := NewHandler(svc, "http://localhost:8080")
 	h.Register(r)
 	return r
 }
@@ -59,10 +38,16 @@ func TestShortenHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			svc := mocks.NewMockshortenerService(ctrl)
+
+			if tt.wantStatus == http.StatusCreated {
+				svc.EXPECT().Shorten("https://example.com").Return("abc123", nil)
+			}
+
 			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tt.body))
 			rr := httptest.NewRecorder()
-
-			newTestEngine().ServeHTTP(rr, req)
+			newEngine(svc).ServeHTTP(rr, req)
 
 			if rr.Code != tt.wantStatus {
 				t.Errorf("got status %d, want %d", rr.Code, tt.wantStatus)
@@ -72,10 +57,13 @@ func TestShortenHandler(t *testing.T) {
 }
 
 func TestShortenHandlerResponseBody(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	svc := mocks.NewMockshortenerService(ctrl)
+	svc.EXPECT().Shorten("https://example.com").Return("abc123", nil)
+
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("https://example.com"))
 	rr := httptest.NewRecorder()
-
-	newTestEngine().ServeHTTP(rr, req)
+	newEngine(svc).ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("got status %d, want %d", rr.Code, http.StatusCreated)
@@ -86,25 +74,27 @@ func TestShortenHandlerResponseBody(t *testing.T) {
 }
 
 func TestRedirectHandler(t *testing.T) {
-	store := newMockStorage()
-	store.Set("abc123", "https://example.com")
-
 	tests := []struct {
 		name         string
 		id           string
+		resolveURL   string
+		resolveFound bool
 		wantStatus   int
 		wantLocation string
 	}{
-		{"existing id", "abc123", http.StatusTemporaryRedirect, "https://example.com"},
-		{"nonexistent id", "unknown", http.StatusBadRequest, ""},
+		{"existing id", "abc123", "https://example.com", true, http.StatusTemporaryRedirect, "https://example.com"},
+		{"nonexistent id", "unknown", "", false, http.StatusBadRequest, ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			svc := mocks.NewMockshortenerService(ctrl)
+			svc.EXPECT().Resolve(tt.id).Return(tt.resolveURL, tt.resolveFound)
+
 			req := httptest.NewRequest(http.MethodGet, "/"+tt.id, nil)
 			rr := httptest.NewRecorder()
-
-			newTestEngineWithStore(store).ServeHTTP(rr, req)
+			newEngine(svc).ServeHTTP(rr, req)
 
 			if rr.Code != tt.wantStatus {
 				t.Errorf("got status %d, want %d", rr.Code, tt.wantStatus)
@@ -131,10 +121,12 @@ func TestRouteInvalidRequests(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			svc := mocks.NewMockshortenerService(ctrl)
+
 			req := httptest.NewRequest(tt.method, tt.path, nil)
 			rr := httptest.NewRecorder()
-
-			newTestEngine().ServeHTTP(rr, req)
+			newEngine(svc).ServeHTTP(rr, req)
 
 			if rr.Code != http.StatusBadRequest {
 				t.Errorf("got status %d, want %d", rr.Code, http.StatusBadRequest)
