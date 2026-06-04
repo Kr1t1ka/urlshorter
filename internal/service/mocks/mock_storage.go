@@ -55,9 +55,11 @@ func (mr *MockStorageMockRecorder) Get(id any) *gomock.Call {
 }
 
 // Set mocks base method.
-func (m *MockStorage) Set(id, url string) {
+func (m *MockStorage) Set(id, url string) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Set", id, url)
+	ret := m.ctrl.Call(m, "Set", id, url)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Set indicates an expected call of Set.
