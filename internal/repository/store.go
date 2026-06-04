@@ -1,6 +1,9 @@
 package repository
 
-import "sync"
+import (
+	"errors"
+	"sync"
+)
 
 type Store struct {
 	mu   sync.Mutex
@@ -11,10 +14,14 @@ func NewStore() *Store {
 	return &Store{data: map[string]string{}}
 }
 
-func (s *Store) Set(id, url string) {
+func (s *Store) Set(id, url string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if _, exists := s.data[id]; exists {
+		return errors.New("already exists")
+	}
 	s.data[id] = url
+	return nil
 }
 
 func (s *Store) Get(id string) (string, bool) {
