@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"log"
+
+	"github.com/Kr1t1ka/shortUrl/internal/repository"
 )
 
 //go:generate mockgen -source=shortener.go -destination=mocks/mock_storage.go -package=mocks
@@ -29,11 +31,14 @@ func (s *Shortener) Shorten(originalURL string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		storeError := s.store.Set(id, originalURL)
-		if storeError == nil {
+		err = s.store.Set(id, originalURL)
+		if err == nil {
 			return id, nil
 		}
-		log.Printf("store set error: id=%v", id)
+		if !errors.Is(err, repository.ErrIDExists) {
+			return "", err
+		}
+		log.Printf("id collision: %v, retrying", id)
 	}
 	return "", errors.New("failed to generate unique id")
 }

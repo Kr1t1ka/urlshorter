@@ -12,7 +12,7 @@ func TestShorten(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	store := mocks.NewMockStorage(ctrl)
 
-	store.EXPECT().Set(gomock.Any(), "https://example.com")
+	store.EXPECT().Set(gomock.Any(), "https://example.com").Return(nil)
 
 	svc := NewShortener(store)
 
