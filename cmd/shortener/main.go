@@ -3,7 +3,9 @@ package main
 import (
 	"log"
 
+	"github.com/Kr1t1ka/shortUrl/internal/middleware"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
 	"github.com/Kr1t1ka/shortUrl/internal/config"
 	"github.com/Kr1t1ka/shortUrl/internal/handler"
@@ -13,12 +15,14 @@ import (
 
 func main() {
 	cfg := config.New()
+	logger, _ := zap.NewProduction()
 
 	store := repository.NewStore()
 	shortener := service.NewShortener(store)
 	h := handler.NewHandler(shortener, cfg.BaseURL)
 
-	r := gin.Default()
+	r := gin.New()
+	r.Use(middleware.Logger(logger))
 	h.Register(r)
 
 	log.Fatal(r.Run(cfg.ServerAddr))
