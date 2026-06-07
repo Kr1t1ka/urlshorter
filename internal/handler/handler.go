@@ -46,6 +46,11 @@ func (h *Handler) shortenHandler(c *gin.Context) {
 		return
 	}
 
+	if u, err := url.ParseRequestURI(originalURL); err != nil || u.Host == "" {
+		c.String(http.StatusBadRequest, "invalid url")
+		return
+	}
+
 	id, err := h.shortener.Shorten(originalURL)
 	if err != nil {
 		log.Printf("shorten error: %v", err)
