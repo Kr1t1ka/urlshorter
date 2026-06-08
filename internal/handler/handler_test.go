@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -34,6 +35,8 @@ func TestShortenHandler(t *testing.T) {
 		{"valid url", "https://example.com", http.StatusCreated},
 		{"empty body", "", http.StatusBadRequest},
 		{"whitespace only", "   ", http.StatusBadRequest},
+		{"invalid url", "not-a-url", http.StatusBadRequest},
+		{"url without host", "https:", http.StatusBadRequest},
 	}
 
 	for _, tt := range tests {
@@ -53,6 +56,20 @@ func TestShortenHandler(t *testing.T) {
 				t.Errorf("got status %d, want %d", rr.Code, tt.wantStatus)
 			}
 		})
+	}
+}
+
+func TestShortenHandlerServiceError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	svc := mocks.NewMockshortenerService(ctrl)
+	svc.EXPECT().Shorten("https://example.com").Return("", errors.New("storage error"))
+
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("https://example.com"))
+	rr := httptest.NewRecorder()
+	newEngine(svc).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("got status %d, want %d", rr.Code, http.StatusInternalServerError)
 	}
 }
 

@@ -1,10 +1,12 @@
 package service
 
 import (
+	"errors"
 	"testing"
 
 	"go.uber.org/mock/gomock"
 
+	"github.com/Kr1t1ka/shortUrl/internal/repository"
 	"github.com/Kr1t1ka/shortUrl/internal/service/mocks"
 )
 
@@ -38,6 +40,32 @@ func TestResolve(t *testing.T) {
 	}
 	if got != "https://example.com" {
 		t.Errorf("got %q, want %q", got, "https://example.com")
+	}
+}
+
+func TestShortenStorageError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	store := mocks.NewMockStorage(ctrl)
+	store.EXPECT().Set(gomock.Any(), "https://example.com").Return(errors.New("storage error"))
+
+	svc := NewShortener(store)
+
+	_, err := svc.Shorten("https://example.com")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestShortenIDCollision(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	store := mocks.NewMockStorage(ctrl)
+	store.EXPECT().Set(gomock.Any(), "https://example.com").Return(repository.ErrIDExists).Times(maxAttempts)
+
+	svc := NewShortener(store)
+
+	_, err := svc.Shorten("https://example.com")
+	if err == nil {
+		t.Fatal("expected error after max attempts")
 	}
 }
 
