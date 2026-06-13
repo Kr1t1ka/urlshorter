@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"io"
 	"log"
 	"net/http"
@@ -25,8 +26,17 @@ func NewHandler(shortener shortenerService, baseURL string) *Handler {
 	return &Handler{shortener: shortener, baseURL: baseURL}
 }
 
+type shortenRequest struct {
+	URL string `json:"url"`
+}
+
+type shortenResponse struct {
+	Result string `json:"result"`
+}
+
 func (h *Handler) Register(r *gin.Engine) {
 	r.POST("/", h.shortenHandler)
+	r.POST("/api/shorten", h.apiShortenHandler)
 	r.GET("/:id", h.redirectHandler)
 	r.NoRoute(func(c *gin.Context) {
 		c.String(http.StatusBadRequest, "bad request")
@@ -66,6 +76,35 @@ func (h *Handler) shortenHandler(c *gin.Context) {
 	}
 
 	c.String(http.StatusCreated, shortURL)
+}
+
+func (h *Handler) apiShortenHandler(c *gin.Context) {
+	var req shortenRequest
+	if err := json.NewDecoder(c.Request.Body).Decode(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid json"})
+		return
+	}
+
+	if u, err := url.ParseRequestURI(req.URL); err != nil || u.Host == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid url"})
+		return
+	}
+
+	id, err := h.shortener.Shorten(req.URL)
+	if err != nil {
+		log.Printf("shorten error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+
+	shortURL, err := url.JoinPath(h.baseURL, id)
+	if err != nil {
+		log.Printf("url join error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, shortenResponse{Result: shortURL})
 }
 
 func (h *Handler) redirectHandler(c *gin.Context) {

@@ -125,6 +125,78 @@ func TestRedirectHandler(t *testing.T) {
 	}
 }
 
+func TestAPIShortenHandler(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		mockSetup  func(svc *mocks.MockshortenerService)
+		wantStatus int
+		wantResult string
+	}{
+		{
+			name: "valid url",
+			body: `{"url":"https://example.com"}`,
+			mockSetup: func(svc *mocks.MockshortenerService) {
+				svc.EXPECT().Shorten("https://example.com").Return("abc123", nil)
+			},
+			wantStatus: http.StatusCreated,
+			wantResult: "http://localhost:8080/abc123",
+		},
+		{
+			name:       "invalid json",
+			body:       `not json`,
+			mockSetup:  func(svc *mocks.MockshortenerService) {},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "invalid url",
+			body:       `{"url":"not-a-url"}`,
+			mockSetup:  func(svc *mocks.MockshortenerService) {},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "empty url",
+			body:       `{"url":""}`,
+			mockSetup:  func(svc *mocks.MockshortenerService) {},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "service error",
+			body: `{"url":"https://example.com"}`,
+			mockSetup: func(svc *mocks.MockshortenerService) {
+				svc.EXPECT().Shorten("https://example.com").Return("", errors.New("error"))
+			},
+			wantStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			svc := mocks.NewMockshortenerService(ctrl)
+			tt.mockSetup(svc)
+
+			req := httptest.NewRequest(http.MethodPost, "/api/shorten", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			rr := httptest.NewRecorder()
+			newEngine(svc).ServeHTTP(rr, req)
+
+			if rr.Code != tt.wantStatus {
+				t.Errorf("got status %d, want %d", rr.Code, tt.wantStatus)
+			}
+			if tt.wantResult != "" && !strings.Contains(rr.Body.String(), tt.wantResult) {
+				t.Errorf("body %q does not contain %q", rr.Body.String(), tt.wantResult)
+			}
+			if rr.Code == http.StatusCreated {
+				ct := rr.Header().Get("Content-Type")
+				if !strings.Contains(ct, "application/json") {
+					t.Errorf("got Content-Type %q, want application/json", ct)
+				}
+			}
+		})
+	}
+}
+
 func TestRouteInvalidRequests(t *testing.T) {
 	tests := []struct {
 		name   string
