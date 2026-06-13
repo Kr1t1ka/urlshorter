@@ -23,6 +23,8 @@ func main() {
 
 	r := gin.New()
 	r.Use(middleware.Logger(logger))
+	r.Use(middleware.GzipDecompress())
+	r.Use(middleware.GzipCompress())
 	h.Register(r)
 
 	log.Fatal(r.Run(cfg.ServerAddr))
