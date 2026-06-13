@@ -17,7 +17,16 @@ func main() {
 	cfg := config.New()
 	logger, _ := zap.NewProduction()
 
-	store := repository.NewStore()
+	var store service.Storage
+	if cfg.FileStoragePath != "" {
+		fs, err := repository.NewFileStore(cfg.FileStoragePath)
+		if err != nil {
+			log.Fatalf("file store: %v", err)
+		}
+		store = fs
+	} else {
+		store = repository.NewStore()
+	}
 	shortener := service.NewShortener(store)
 	h := handler.NewHandler(shortener, cfg.BaseURL)
 
