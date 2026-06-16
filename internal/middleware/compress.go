@@ -40,25 +40,43 @@ func GzipCompress() gin.HandlerFunc {
 
 		gw := &gzipResponseWriter{ResponseWriter: c.Writer, gz: gz}
 		c.Writer = gw
+		defer func() {
+			if gw.used {
+				_ = gz.Close()
+			}
+		}()
 		c.Next()
-
-		if gw.used {
-			gz.Close()
-		}
 	}
 }
 
 type gzipResponseWriter struct {
 	gin.ResponseWriter
-	gz   *gzip.Writer
-	used bool
+	gz        *gzip.Writer
+	used      bool
+	committed bool
+}
+
+func (w *gzipResponseWriter) decide() {
+	if w.committed {
+		return
+	}
+	ct := w.Header().Get("Content-Type")
+	if strings.Contains(ct, "application/json") || strings.Contains(ct, "text/html") {
+		w.used = true
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Del("Content-Length")
+		w.committed = true
+	}
+}
+
+func (w *gzipResponseWriter) WriteHeader(status int) {
+	w.decide()
+	w.ResponseWriter.WriteHeader(status)
 }
 
 func (w *gzipResponseWriter) Write(data []byte) (int, error) {
-	ct := w.Header().Get("Content-Type")
-	if strings.Contains(ct, "application/json") || strings.Contains(ct, "text/html") {
-		w.Header().Set("Content-Encoding", "gzip")
-		w.used = true
+	w.decide()
+	if w.used {
 		return w.gz.Write(data)
 	}
 	return w.ResponseWriter.Write(data)

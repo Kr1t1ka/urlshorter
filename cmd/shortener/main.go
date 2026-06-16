@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"log"
 
 	"github.com/Kr1t1ka/shortUrl/internal/middleware"
@@ -14,19 +15,37 @@ import (
 )
 
 func main() {
-	cfg := config.New()
-	logger, _ := zap.NewProduction()
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
+	cfg, err := config.New()
+	if err != nil {
+		return err
+	}
+
+	logger, err := zap.NewProduction()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = logger.Sync() }()
 
 	var store service.Storage
 	if cfg.FileStoragePath != "" {
 		fs, err := repository.NewFileStore(cfg.FileStoragePath)
 		if err != nil {
-			log.Fatalf("file store: %v", err)
+			return err
 		}
 		store = fs
 	} else {
 		store = repository.NewStore()
 	}
+	if c, ok := store.(io.Closer); ok {
+		defer func() { _ = c.Close() }()
+	}
+
 	shortener := service.NewShortener(store)
 	h := handler.NewHandler(shortener, cfg.BaseURL)
 
@@ -36,5 +55,5 @@ func main() {
 	r.Use(middleware.GzipCompress())
 	h.Register(r)
 
-	log.Fatal(r.Run(cfg.ServerAddr))
+	return r.Run(cfg.ServerAddr)
 }

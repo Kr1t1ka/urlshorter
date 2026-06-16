@@ -56,3 +56,7 @@ func (fs *FileStore) Set(id, url string) error {
 
 	return json.NewEncoder(fs.file).Encode(r)
 }
+
+func (fs *FileStore) Close() error {
+	return fs.file.Close()
+}

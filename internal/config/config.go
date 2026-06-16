@@ -2,7 +2,7 @@ package config
 
 import (
 	"flag"
-	"log"
+	"fmt"
 
 	"github.com/caarlos0/env/v11"
 )
@@ -19,7 +19,7 @@ type envVars struct {
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
 }
 
-func New() *Config {
+func New() (*Config, error) {
 	cfg := &Config{}
 	flag.StringVar(&cfg.ServerAddr, "a", "localhost:8080", "HTTP server address")
 	flag.StringVar(&cfg.BaseURL, "b", "http://localhost:8080", "Base URL for short links")
@@ -28,7 +28,7 @@ func New() *Config {
 
 	e := &envVars{}
 	if err := env.Parse(e); err != nil {
-		log.Fatalf("config error: %v", err)
+		return nil, fmt.Errorf("parse env: %w", err)
 	}
 	if e.ServerAddr != "" {
 		cfg.ServerAddr = e.ServerAddr
@@ -40,5 +40,5 @@ func New() *Config {
 		cfg.FileStoragePath = e.FileStoragePath
 	}
 
-	return cfg
+	return cfg, nil
 }

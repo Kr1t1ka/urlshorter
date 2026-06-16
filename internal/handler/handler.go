@@ -2,6 +2,8 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -10,6 +12,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+var ErrInvalidURL = errors.New("invalid url")
 
 //go:generate mockgen -source=handler.go -destination=mocks/mock_shortener_service.go -package=mocks
 type shortenerService interface {
@@ -43,38 +47,45 @@ func (h *Handler) Register(r *gin.Engine) {
 	})
 }
 
+func validateURL(raw string) error {
+	u, err := url.ParseRequestURI(raw)
+	if err != nil || u.Host == "" {
+		return fmt.Errorf("%w: %q", ErrInvalidURL, raw)
+	}
+	return nil
+}
+
+func (h *Handler) makeShortURL(originalURL string) (string, error) {
+	if err := validateURL(originalURL); err != nil {
+		return "", err
+	}
+	id, err := h.shortener.Shorten(originalURL)
+	if err != nil {
+		return "", fmt.Errorf("shorten: %w", err)
+	}
+	shortURL, err := url.JoinPath(h.baseURL, id)
+	if err != nil {
+		return "", fmt.Errorf("join path: %w", err)
+	}
+	return shortURL, nil
+}
+
 func (h *Handler) shortenHandler(c *gin.Context) {
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		c.String(http.StatusBadRequest, "bad request")
 		return
 	}
-
-	originalURL := strings.TrimSpace(string(body))
-	if len(originalURL) == 0 {
-		c.String(http.StatusBadRequest, "bad request")
-		return
-	}
-
-	if u, err := url.ParseRequestURI(originalURL); err != nil || u.Host == "" {
-		c.String(http.StatusBadRequest, "invalid url")
-		return
-	}
-
-	id, err := h.shortener.Shorten(originalURL)
+	shortURL, err := h.makeShortURL(strings.TrimSpace(string(body)))
 	if err != nil {
+		if errors.Is(err, ErrInvalidURL) {
+			c.String(http.StatusBadRequest, "invalid url")
+			return
+		}
 		log.Printf("shorten error: %v", err)
 		c.String(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 		return
 	}
-
-	shortURL, err := url.JoinPath(h.baseURL, id)
-	if err != nil {
-		log.Printf("url join error: %v", err)
-		c.String(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
-		return
-	}
-
 	c.String(http.StatusCreated, shortURL)
 }
 
@@ -84,26 +95,16 @@ func (h *Handler) apiShortenHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid json"})
 		return
 	}
-
-	if u, err := url.ParseRequestURI(req.URL); err != nil || u.Host == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid url"})
-		return
-	}
-
-	id, err := h.shortener.Shorten(req.URL)
+	shortURL, err := h.makeShortURL(req.URL)
 	if err != nil {
+		if errors.Is(err, ErrInvalidURL) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid url"})
+			return
+		}
 		log.Printf("shorten error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
-
-	shortURL, err := url.JoinPath(h.baseURL, id)
-	if err != nil {
-		log.Printf("url join error: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
-		return
-	}
-
 	c.JSON(http.StatusCreated, shortenResponse{Result: shortURL})
 }
 
